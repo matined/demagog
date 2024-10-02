@@ -1,9 +1,3 @@
-enum Truthness {
-  TRUE = "true",
-  PARTIAL = "partial",
-  FALSE = "false",
-}
-
 interface Statement {
   statement: string;
   context: string;
@@ -11,8 +5,8 @@ interface Statement {
 }
 
 interface FactCheck {
-  truthness: Truthness;
+  truthness: "TRUE" | "PARTIAL" | "FALSE";
   justification: string;
 }
 
-export type { Statement, FactCheck, Truthness };
+export type { Statement, FactCheck };

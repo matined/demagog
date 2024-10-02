@@ -1,7 +1,7 @@
 "use server";
 
 import { Groq } from "groq-sdk";
-import { Statement, Truthness, FactCheck } from "../types/fact-checking";
+import { Statement, FactCheck } from "../types/fact-checking";
 import { FACT_DETECTION_SYSTEM_PROMPTS } from "./data";
 
 const groq = new Groq();
@@ -56,7 +56,7 @@ export async function factCheckStatement(
             "statement"
           )} ${formData.get(
             "content"
-          )}\n\nIn the first line of the answer write TRUE or FALSE, than justify in the following lines citing sources.`,
+          )}\n\nIn the first line of the answer write TRUE, PARTIAL, FALSE. Than justify in the following lines citing sources.`,
         },
       ],
       max_tokens: 300,
@@ -73,29 +73,28 @@ export async function factCheckStatement(
     }),
   };
 
-  let factCheck: FactCheck | null = null;
+  try {
+    const response = await fetch(
+      "https://api.perplexity.ai/chat/completions",
+      options
+    );
+    const data = await response.json();
+    const message = data.choices[0].message.content;
+    const truthness = message
+      .slice(0, message.indexOf("\n"))
+      .replace(/\*/g, "")
+      .trim();
 
-  fetch("https://api.perplexity.ai/chat/completions", options)
-    .then((response) => {
-      return response.json();
-    })
-    .then((data) => {
-      const message = data.choices[0].message.content;
-      const truthness = message
-        .slice(0, message.indexOf("\n"))
-        .trim() as Truthness;
+    const justification = message.slice(message.indexOf("\n") + 1).trim();
 
-      const justification = message.slice(message.indexOf("\n") + 1).trim();
+    const factCheck: FactCheck = {
+      truthness,
+      justification,
+    };
 
-      factCheck = {
-        truthness,
-        justification,
-      };
-    })
-    .catch(() => {
-      console.error("Fact checking failed.");
-      factCheck = null;
-    });
-
-  return factCheck;
+    return factCheck;
+  } catch (error) {
+    console.error("Failed to fact check a statement");
+    return null;
+  }
 }

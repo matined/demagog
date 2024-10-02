@@ -83,7 +83,7 @@ export default function Transcription({ className }: { className?: string }) {
 
       timerRef.current = setTimeout(() => {
         stopRecording();
-      }, 60000);
+      }, 20000);
     } catch (err) {
       console.error("Error accessing microphone:", err);
       toast.error("There was an error accessing microphone.");

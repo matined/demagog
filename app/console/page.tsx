@@ -1,39 +1,16 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
-
 import NewSession from "@/components/console/home/new-session";
-import AdvancedConfiguration from "@/components/console/home/advanced-configuration";
+import History from "@/components/console/home/history";
 
 export default function Console() {
-  const [advancedConfiguration, setAdvancedConfiguration] = useState(false);
-  const topRef = useRef<null | HTMLDivElement>(null);
-  const bottomRef = useRef<null | HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (advancedConfiguration) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    } else {
-      topRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [advancedConfiguration]);
-
   return (
-    <div className="overflow-hidden">
-      <div
-        className="relative w-full h-screen bg-[url('/backgrounds/hero.svg')] bg-cover bg-bottom"
-        ref={topRef}
-      >
-        <NewSession setAdvancedConfiguration={setAdvancedConfiguration} />
+    <>
+      <div className="w-full h-full z-20 grid grid-cols-2 grid-rows-2 gap-4">
+        <NewSession className="animate-fade-in" />
+        <History className="row-span-2 animate-fade-in" />
       </div>
-      <div className="relative w-screen h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute w-[200%] h-full bg-tertiary -translate-y-[80%] rotate-[5deg]" />
-        <AdvancedConfiguration
-          className="w-96"
-          setAdvancedConfiguration={setAdvancedConfiguration}
-        />
-        <div ref={bottomRef} />
-      </div>
-    </div>
+      <div className="absolute w-screen h-screen left-0 bottom-0 bg-[url('/backgrounds/hero.svg')] bg-cover bg-bottom z-1 animate-fade-in" />
+    </>
   );
 }

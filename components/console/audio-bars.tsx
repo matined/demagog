@@ -1,14 +1,22 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
+
 import { useSession } from "@/lib/hooks/use-session";
-import { useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 
 const Audiobars = ({
+  className,
   barColor = "#ff3e3e",
   minBarHeight = 2,
   maxBarHeight = 100,
+}: {
+  className?: string;
+  barColor?: string;
+  minBarHeight?: number;
+  maxBarHeight?: number;
 }) => {
-  const [errorMessage, setErrorMessage] = useState("");
   const canvasRef = useRef(null);
   const audioContextRef = useRef(null);
   const animationFrameIdRef = useRef(null);
@@ -50,7 +58,7 @@ const Audiobars = ({
       })
       .catch((err) => {
         console.error("Error accessing microphone:", err);
-        setErrorMessage("Error accessing microphone: " + err.message);
+        toast.error("There was an error accessing microphone.");
       });
 
     const visualize = () => {
@@ -116,8 +124,7 @@ const Audiobars = ({
   }, [barColor, minBarHeight, maxBarHeight, session.isRecording]);
 
   return (
-    <div style={{ textAlign: "center", width: "100%" }}>
-      {errorMessage && <p>{errorMessage}</p>}
+    <div className={cn("text-center w-full", className)}>
       <canvas
         ref={canvasRef}
         style={{

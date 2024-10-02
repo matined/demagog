@@ -19,7 +19,7 @@ export default function Controls({
 
   return (
     <Card className={cn("w-full h-full", className)}>
-      <CardBody className="grid grid-cols-[1fr_10px_2fr_10px_1fr]">
+      <CardBody className="flex flex-row justify-between items-center">
         <div className="h-full flex items-center justify-start">
           <Button
             size="lg"
@@ -40,11 +40,9 @@ export default function Controls({
             {session.isRecording ? "Pause session" : "Resume session"}
           </Button>
         </div>
-        <Divider orientation="vertical" />
-        <Configuration className="justify-center" />
-        <Divider orientation="vertical" />
-        <div className="flex items-center justify-end">
-          <ExitButton />
+        <div className="flex flex-row gap-4 h-full">
+          <Divider orientation="vertical" />
+          <Configuration className="justify-end" />
         </div>
       </CardBody>
     </Card>

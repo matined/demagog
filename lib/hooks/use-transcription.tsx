@@ -1,9 +1,9 @@
 import React from "react";
+import { TranscriptUtterance } from "assemblyai";
 
 interface TranscriptionContext {
-  transcription: string;
-  setTranscription: (transcription: string) => void;
-  appendTranscription: (transcription: string) => void;
+  utterances: TranscriptUtterance[];
+  extendUtterances: (utterances: TranscriptUtterance[]) => void;
 }
 
 const TranscriptionContext = React.createContext<
@@ -27,18 +27,14 @@ interface TranscriptionProviderProps {
 export const TranscriptionProvider = ({
   children,
 }: TranscriptionProviderProps) => {
-  const [transcription, setTranscription] = React.useState("");
+  const [utterances, setUtterances] = React.useState<TranscriptUtterance[]>([]);
 
-  const appendTranscription = (newTranscription: string) => {
-    setTranscription(
-      (prevTranscription) => prevTranscription + " " + newTranscription
-    );
+  const extendUtterances = (utterances: TranscriptUtterance[]) => {
+    setUtterances((prevUtterances) => [...prevUtterances, ...utterances]);
   };
 
   return (
-    <TranscriptionContext.Provider
-      value={{ transcription, setTranscription, appendTranscription }}
-    >
+    <TranscriptionContext.Provider value={{ utterances, extendUtterances }}>
       {children}
     </TranscriptionContext.Provider>
   );

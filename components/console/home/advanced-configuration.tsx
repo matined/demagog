@@ -14,18 +14,20 @@ import {
 import { useSession } from "@/lib/hooks/use-session";
 import { IoLanguage, IoPeople, IoTimer } from "react-icons/io5";
 import { MdHearing } from "react-icons/md";
+import { useRouter } from "next/navigation";
 
 export default function AdvancedConfiguration({
   className,
   setAdvancedConfiguration,
 }: {
-  className: string;
+  className?: string;
   setAdvancedConfiguration: (value: boolean) => void;
 }): React.ReactNode {
   const { session, startRecording, setConfig } = useSession();
+  const router = useRouter();
 
   return (
-    <Card className={`mt-2 flex flex-col gap-2 w-full ${className}`}>
+    <Card className={`flex flex-col gap-2 w-full ${className}`}>
       <CardHeader className="flex flex-col gap-2">
         <p className="font-bold text-foreground">Session Settings</p>
       </CardHeader>
@@ -103,10 +105,8 @@ export default function AdvancedConfiguration({
         <Button
           onPress={() => {
             setAdvancedConfiguration(false);
-
-            setTimeout(() => {
-              startRecording();
-            }, 500);
+            startRecording();
+            router.push("/console/session");
           }}
           className="bg-tertiary text-white"
         >

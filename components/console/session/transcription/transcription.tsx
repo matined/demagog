@@ -1,10 +1,6 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { MdOutlineSpeakerNotes } from "react-icons/md";
-
-import { useSession } from "@/lib/hooks/use-session";
-import { transcribeAudio } from "@/lib/transcription";
 import {
   Card,
   CardBody,
@@ -12,105 +8,107 @@ import {
   Divider,
   ScrollShadow,
 } from "@nextui-org/react";
+import { toast } from "sonner";
+import { MdOutlineSpeakerNotes } from "react-icons/md";
+
+import { useSession } from "@/lib/hooks/use-session";
+import { transcribeAudio } from "@/lib/transcription";
 import { cn } from "@/lib/utils";
 import { useTranscription } from "@/lib/hooks/use-transcription";
+import Utterance from "./utterance";
 
 export default function Transcription({ className }: { className?: string }) {
-  const { transcription, setTranscription } = useTranscription();
+  const { utterances, extendUtterances } = useTranscription();
   const { session } = useSession();
-  const isActive = useRef(true);
-  const frzTranscript = useRef<string>("");
-  const curTranscript = useRef<string>("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const mimeType = useRef<string>("");
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isRecordingRef = useRef(session.isRecording);
+  const bottomRef = useRef<null | HTMLDivElement>(null);
+
+  const handleTranscription = async (audioBlob: Blob) => {
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "audio.webm");
+
+    if (session.config.language !== "auto")
+      formData.append("language", session.config.language);
+    else formData.append("language_detection", "true");
+
+    formData.append("speakerCount", session.config.speakerCount.toString());
+
+    transcribeAudio(formData)
+      .then((utterances) => {
+        extendUtterances(utterances);
+      })
+      .catch(() => {
+        toast.error("Transcription failed.");
+      });
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/webm",
+        });
+
+        handleTranscription(audioBlob);
+
+        audioChunksRef.current = [];
+
+        if (isRecordingRef.current) {
+          startRecording();
+        } else {
+          // Stop all media tracks if not continuing
+          if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+            mediaRecorderRef.current.stream
+              .getTracks()
+              .forEach((track) => track.stop());
+          }
+        }
+      };
+
+      mediaRecorderRef.current.start();
+
+      timerRef.current = setTimeout(() => {
+        stopRecording();
+      }, 60000);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      toast.error("There was an error accessing microphone.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+    }
+  };
 
   useEffect(() => {
+    isRecordingRef.current = session.isRecording;
+
     if (session.isRecording) startRecording();
     else stopRecording();
   }, [session.isRecording]);
 
-  const resetAndInitializeRecorder = (): void => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream
-        .getTracks()
-        .forEach((track) => track.stop());
-    }
-
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      streamRef.current = stream;
-      isActive.current = true;
-      const options = { mimeType: mimeType.current };
-      if (mimeType && mimeType.current === "") {
-        let options = { mimeType: "" };
-        if (MediaRecorder.isTypeSupported("audio/webm")) {
-          options = { mimeType: "audio/webm" };
-        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
-          options = { mimeType: "audio/mp4" };
-        } else {
-          mimeType.current = "audio/webm";
-        }
-
-        mimeType.current = options.mimeType;
-      }
-      mediaRecorderRef.current = new MediaRecorder(stream, options);
-      chunksRef.current = [];
-      mediaRecorderRef.current.addEventListener(
-        "dataavailable",
-        handleDataAvailable
-      );
-      mediaRecorderRef.current.start(5000);
-    });
-  };
-
-  const handleDataAvailable = async (event: BlobEvent): Promise<void> => {
-    if (!isActive.current || event.data.size === 0) {
-      return;
-    }
-
-    chunksRef.current.push(event.data);
-    const audioBlob = new Blob(chunksRef.current, { type: mimeType.current });
-    const formData = new FormData();
-    formData.append("audio", audioBlob);
-    console.log("Transcribing audio...");
-    const { transcript: new_transcription, rtf } = await transcribeAudio({
-      formData: formData,
-      timestamp: Date.now(),
-      noSpeechProb: 1 - session.config.sensitivity,
-      language: session.config.language,
-    });
-
-    curTranscript.current = new_transcription;
-
-    const audio_len = chunksRef.current.reduce(
-      (acc, chunk) => acc + chunk.size,
-      0
-    );
-    if (audio_len >= 300000) {
-      frzTranscript.current += " " + curTranscript.current;
-      curTranscript.current = "";
-      setTranscription(
-        frzTranscript.current.trim() + " " + curTranscript.current.trim()
-      );
-      resetAndInitializeRecorder();
-    }
-  };
-
-  const startRecording = (): void => {
-    resetAndInitializeRecorder();
-  };
-
-  const stopRecording = async (): Promise<void> => {
-    isActive.current = false;
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
-    }
-  };
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [utterances]);
 
   return (
     <Card className={cn("w-full h-full", className)}>
@@ -119,9 +117,22 @@ export default function Transcription({ className }: { className?: string }) {
         <p>Transcription</p>
       </CardHeader>
       <Divider />
-      <CardBody>
-        <ScrollShadow hideScrollBar className="w-full h-full">
-          <p className="text-sm">{transcription}</p>
+      <CardBody className="relative w-full h-full overflow-hidden">
+        <ScrollShadow hideScrollBar className="absolute inset-3">
+          {utterances.length === 0 && session.isRecording && (
+            <p className="mt-12 text-center text-gray-500 animate-pulse">
+              Listening. Wait a moment for the first transcription...
+            </p>
+          )}
+          {utterances.length === 0 && !session.isRecording && (
+            <p className="mt-12 text-center text-gray-500">
+              Resume the session to start transribing.
+            </p>
+          )}
+          {utterances.map((utterance, index) => (
+            <Utterance key={index} utterance={utterance} className="mb-2" />
+          ))}
+          <div ref={bottomRef} />
         </ScrollShadow>
       </CardBody>
     </Card>

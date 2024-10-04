@@ -11,8 +11,9 @@ interface SessionProps {
 export default function Session({ className, id }: SessionProps) {
   return (
     <div
+      key={`session-${id}`}
       className={cn(
-        "w-full h-full grid grid-rows-[1fr_72px] grid-cols-[3fr_4fr] gap-4",
+        "w-full h-full grid grid-rows-[1fr_min-content] grid-cols-[3fr_4fr] gap-4",
         className
       )}
     >

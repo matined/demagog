@@ -1,127 +1,162 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 
 import { useSession } from "@/lib/hooks/use-session";
 import { cn } from "@/lib/utils";
+import { useMicrophone } from "@/lib/hooks/use-microphone";
 
-const Audiobars = ({
-  className,
-  barColor = "#ff3e3e",
-  minBarHeight = 2,
-  maxBarHeight = 100,
-}: {
+interface AudiobarsProps {
   className?: string;
   barColor?: string;
   minBarHeight?: number;
   maxBarHeight?: number;
+}
+
+const Audiobars: React.FC<AudiobarsProps> = ({
+  className,
+  barColor = "#ff3e3e",
+  minBarHeight = 2,
+  maxBarHeight = 100,
 }) => {
-  const canvasRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const animationFrameIdRef = useRef(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationFrameIdRef = useRef<number | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
   const { session } = useSession();
+  const { stream, audioContext, startMicrophone } = useMicrophone();
+
+  const startVisualization = useCallback(async () => {
+    if (!stream || !audioContext) {
+      await startMicrophone();
+      return;
+    }
+
+    try {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const canvasCtx = canvas.getContext("2d");
+      if (!canvasCtx) return;
+
+      const resizeCanvas = () => {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+      };
+
+      resizeCanvas();
+      window.addEventListener("resize", resizeCanvas);
+
+      // Resume the audio context if suspended
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
+      analyserRef.current = audioContext.createAnalyser();
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
+      // Optional: connect the analyser to the destination if needed
+      // analyserRef.current.connect(audioContext.destination);
+
+      analyserRef.current.fftSize = 1024;
+      analyserRef.current.smoothingTimeConstant = 0.85;
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      dataArrayRef.current = new Uint8Array(bufferLength);
+
+      const visualize = () => {
+        if (!canvas || !canvasCtx) return;
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
+
+        const draw = () => {
+          animationFrameIdRef.current = requestAnimationFrame(draw);
+          if (!analyserRef.current || !dataArrayRef.current) return;
+
+          analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+
+          // Optional: Log the data to debug
+          // console.log("Audio Data:", dataArrayRef.current);
+
+          canvasCtx.clearRect(0, 0, WIDTH, HEIGHT);
+
+          const barWidth = (WIDTH / dataArrayRef.current.length) * 2.5;
+          let x = 0;
+
+          for (let i = 0; i < dataArrayRef.current.length; i++) {
+            const normalizedValue = dataArrayRef.current[i] / 255;
+            const barHeight = session.isRecording
+              ? minBarHeight + normalizedValue * (maxBarHeight - minBarHeight)
+              : minBarHeight;
+
+            canvasCtx.fillStyle = barColor;
+
+            const y = HEIGHT - barHeight;
+            const radius = 5;
+
+            roundRectTop(canvasCtx, x, y, barWidth, barHeight, radius);
+
+            x += barWidth + 1;
+          }
+        };
+
+        const roundRectTop = (
+          ctx: CanvasRenderingContext2D,
+          x: number,
+          y: number,
+          width: number,
+          height: number,
+          radius: number
+        ) => {
+          if (radius > width / 2) radius = width / 2;
+          if (radius > height) radius = height;
+          ctx.beginPath();
+          ctx.moveTo(x, y + height);
+          ctx.lineTo(x, y + radius);
+          ctx.quadraticCurveTo(x, y, x + radius, y);
+          ctx.lineTo(x + width - radius, y);
+          ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+          ctx.lineTo(x + width, y + height);
+          ctx.closePath();
+          ctx.fill();
+        };
+
+        draw();
+      };
+
+      visualize();
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      toast.error("There was an error accessing the microphone.");
+    }
+  }, [
+    stream,
+    audioContext,
+    barColor,
+    minBarHeight,
+    maxBarHeight,
+    session.isRecording,
+    startMicrophone,
+  ]);
+
+  const stopVisualization = useCallback(() => {
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
+    }
+    window.removeEventListener("resize", () => {});
+  }, []);
 
   useEffect(() => {
-    let analyser;
-    let dataArray;
-    let source;
+    if (session.isRecording) {
+      startVisualization();
+    } else {
+      stopVisualization();
+    }
 
-    const canvas = canvasRef.current;
-    const canvasCtx = canvas.getContext("2d");
-
-    // Set canvas dimensions to match its displayed size
-    const resizeCanvas = () => {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
-    };
-
-    resizeCanvas(); // Initial sizing
-    window.addEventListener("resize", resizeCanvas); // Resize on window resize
-
-    // Request microphone access
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then((stream) => {
-        audioContextRef.current = new (window.AudioContext ||
-          window.webkitAudioContext)();
-        analyser = audioContextRef.current.createAnalyser();
-        source = audioContextRef.current.createMediaStreamSource(stream);
-        source.connect(analyser);
-        analyser.fftSize = 1024; // Increased fftSize for smoother animation
-        analyser.smoothingTimeConstant = 0.85; // Adjusted for smoother animation
-        const bufferLength = analyser.frequencyBinCount;
-        dataArray = new Uint8Array(bufferLength);
-
-        // Start visualization
-        visualize();
-      })
-      .catch((err) => {
-        console.error("Error accessing microphone:", err);
-        toast.error("There was an error accessing microphone.");
-      });
-
-    const visualize = () => {
-      const WIDTH = canvas.width;
-      const HEIGHT = canvas.height;
-
-      const draw = () => {
-        animationFrameIdRef.current = requestAnimationFrame(draw);
-        analyser.getByteFrequencyData(dataArray);
-
-        canvasCtx.clearRect(0, 0, WIDTH, HEIGHT); // Clear the canvas
-
-        const barWidth = (WIDTH / dataArray.length) * 2.5;
-        let x = 0;
-
-        for (let i = 0; i < dataArray.length; i++) {
-          // Map audio data to bar height
-          const normalizedValue = dataArray[i] / 255; // Normalize data between 0 and 1
-          const barHeight = session.isRecording
-            ? minBarHeight + normalizedValue * (maxBarHeight - minBarHeight)
-            : minBarHeight;
-
-          canvasCtx.fillStyle = barColor;
-
-          const y = HEIGHT - barHeight;
-          const radius = 5; // Adjust for more or less roundness
-
-          // Draw rounded rectangle (rounded top only)
-          roundRectTop(canvasCtx, x, y, barWidth, barHeight, radius);
-
-          x += barWidth + 1;
-        }
-      };
-
-      // Function to draw rectangles rounded on top only
-      const roundRectTop = (ctx, x, y, width, height, radius) => {
-        if (radius > width / 2) radius = width / 2;
-        if (radius > height) radius = height;
-        ctx.beginPath();
-        ctx.moveTo(x, y + height);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height);
-        ctx.closePath();
-        ctx.fill();
-      };
-
-      draw();
-    };
-
-    // Cleanup function
     return () => {
-      if (animationFrameIdRef.current) {
-        cancelAnimationFrame(animationFrameIdRef.current);
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-      window.removeEventListener("resize", resizeCanvas);
+      stopVisualization();
     };
-  }, [barColor, minBarHeight, maxBarHeight, session.isRecording]);
+  }, [session.isRecording, startVisualization, stopVisualization]);
 
   return (
     <div className={cn("text-center w-full", className)}>

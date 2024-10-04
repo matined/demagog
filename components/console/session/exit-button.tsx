@@ -48,6 +48,7 @@ export default function ExitButton({
                 <Button
                   color="danger"
                   onPress={() => {
+                    onClose();
                     router.push("/console");
                   }}
                 >

@@ -1,7 +1,41 @@
-export const FACT_DETECTION_SYSTEM_PROMPTS: { [key: string]: string } = {
-  en: 'You are a experienced fact checker. Your task is to detect statements that are possible to check using facts and statistics available on the web in the user\'s message. Your are NOT supposed to detect political and subjective opinions. You are supposed to detect verifiable objective statements. Detect up to 3 statements. If there are more choose the most important.\n\nAnswer with a JSON object in the following format:\n{\n  "statements": [\n    {\n      "statement": "<put the detected statement here>",\n      "context: "<put the context from the user\'s message that is helpful when searching on the web, can we a few sentences>"\n      "topic": "<put the topic of the statement here>"\n    }\n  ]\n}\n\nIf there is no verifiable statement in the user\'s message, response with the following json: \n{\n  "statements": []\n}\n',
-  pl: 'Jesteś doświadczonym fact checkerem. Twoim zadaniem jest wykrycie w wypowiedzi użytkownika zdań, które można zweryfikować za pomocą faktów i statystyk dostępnych w sieci. Nie masz wykrywać politycznych i subiektywnych opinii. Masz wykryć weryfikowalne obiektywne stwierdzenia. Wykryj do 3 stwierdzeń. Jeśli jest ich więcej, wybierz najważniejsze.\n\nOdpowiedz za pomocą obiektu JSON w następującym formacie:\n{\n  "statements": [\n    {\n      "statement": "<umieść wykryte stwierdzenie tutaj>",\n      "context: "<umieść kontekst z wypowiedzi użytkownika, który jest pomocny podczas wyszukiwania w sieci, może być kilka zdań>"\n      "topic": "<umieść temat stwierdzenia tutaj>"\n    }\n  ]\n}\n\nJeśli nie ma w wypowiedzi użytkownika weryfikowalnego stwierdzenia, odpowiedz za pomocą następującego jsona: \n{\n  "statements": []\n}\n',
-  es: 'Eres un verificador de hechos experimentado. Tu tarea es detectar declaraciones que sean posibles de verificar utilizando hechos y estadísticas disponibles en la web en el mensaje del usuario. No debes detectar opiniones políticas y subjetivas. Debes detectar declaraciones objetivas verificables. Detecta hasta 3 declaraciones. Si hay más, elige las más importantes.\n\nResponde con un objeto JSON en el siguiente formato:\n{\n  "statements": [\n    {\n      "statement": "<ponga la declaración detectada aquí>",\n      "context: "<ponga el contexto del mensaje del usuario que sea útil al buscar en la web, pueden ser unas pocas frases>"\n      "topic": "<ponga el tema de la declaración aquí>"\n    }\n  ]\n}\n\nSi no hay una declaración verificable en el mensaje del usuario, responde con el siguiente json: \n{\n  "statements": []\n}\n',
-  fr: 'Vous êtes un vérificateur de faits expérimenté. Votre tâche consiste à détecter les déclarations qui sont possibles à vérifier en utilisant des faits et des statistiques disponibles sur le web dans le message de l\'utilisateur. Vous ne devez pas détecter les opinions politiques et subjectives. Vous devez détecter des déclarations objectives vérifiables. Détectez jusqu\'à 3 déclarations. S\'il y en a plus, choisissez les plus importantes.\n\nRépondez avec un objet JSON dans le format suivant:\n{\n  "statements": [\n    {\n      "statement": "<mettez la déclaration détectée ici>",\n      "context: "<mettez le contexte du message de l\'utilisateur qui est utile lors de la recherche sur le web, peut être quelques phrases>"\n      "topic": "<mettez le sujet de la déclaration ici>"\n    }\n  ]\n}\n\nS\'il n\'y a pas de déclaration vérifiable dans le message de l\'utilisateur, répondez avec le json suivant: \n{\n  "statements": []\n}\n',
-  de: 'Du bist ein erfahrener Faktenchecker. Deine Aufgabe ist es, Aussagen zu erkennen, die anhand von Fakten und Statistiken im Web im Benutzerbeitrag überprüfbar sind. Du sollst keine politischen und subjektiven Meinungen erkennen. Du sollst überprüfbare objektive Aussagen erkennen. Erkenne bis zu 3 Aussagen. Wenn es mehr gibt, wähle die wichtigsten aus.\n\nAntworte mit einem JSON-Objekt im folgenden Format:\n{\n  "statements": [\n    {\n      "statement": "<setze die erkannte Aussage hier ein>",\n      "context: "<setze den Kontext aus der Benutzerbeitrag ein, der beim Suchen im Web hilfreich ist, kann ein paar Sätze sein>"\n      "topic": "<setze das Thema der Aussage hier ein>"\n    }\n  ]\n}\n\nWenn es keine überprüfbare Aussage im Benutzerbeitrag gibt, antworte mit dem folgenden JSON: \n{\n  "statements": []\n}\n',
+export const STATEMENT_DETECTION_SYSTEM_PROMPT: string =
+  'Detect statements that require fact-checking during a live interview by analyzing the transcription of the speech. Identify assertions that should be verified and respond in a structured format.\n\n# Steps\n\n1. **Analyze Transcription**: Review the provided transcription of the speech thoroughly.\n2. **Identify Fact-Check Triggers**: Look for statements that contain numbers, statistics, historical claims, bold assertions, or any other claims that can be verified.\n3. **Extract Statements**: Pull out entire sentences or phrases for each identified trigger that requires fact-checking.\n4. **Provide Context**: Note any relevant context around the statement that may affect its meaning or verification process.\n5. **Output Result**: Format your findings in a structured JSON format.\n\n# Output Format\n\nThe output should be a JSON object containing an array of objects. Each object should have the following keys:\n- `"statement"`: The exact text of the statement that needs fact-checking.\n- `"reason"`: A brief explanation of why the statement was flagged for fact-checking.\n- `"context"`: Additional context, if necessary, to understand the statement.\n\nExample:\n```json\n{\n  "statements": [\n    {\n      "statement": "[Extracted statement from transcription]",\n      "reason": "Contains statistical data.",\n      "context": "The speaker was discussing economic growth."\n    }\n  ]\n}\n```\n\n# Examples\n\n**Input:**\n"According to recent studies, 70% of adults suffer from chronic stress."\n\n**Output:**\n```json\n{\n  "statements": [\n    {\n      "statement": "According to recent studies, 70% of adults suffer from chronic stress.",\n      "reason": "Contains statistical data.",\n      "context": "The speaker was discussing health issues in modern society."\n    }\n  ]\n}\n```\n\n# Notes\n\n- Ensure the JSON format is correct and includes all necessary information for each statement.\n- Consider ambiguous claims that could cause confusion or misinterpretation without verification.\n- Statements making controversial or surprising claims should also be flagged.\n- If there\'s no statement return an empty array. Do not force statements. Detect only strong statements that need to be fact-checked.';
+
+export const STATEMENT_DETECTION_RESPONSE_SCHEMA = {
+  type: "json_schema",
+  json_schema: {
+    name: "statements_schema",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        statements: {
+          type: "array",
+          description: "A list of statements with reason and context.",
+          items: {
+            type: "object",
+            properties: {
+              statement: {
+                type: "string",
+                description: "The actual statement made.",
+              },
+              reason: {
+                type: "string",
+                description: "The rationale behind the statement.",
+              },
+              context: {
+                type: "string",
+                description:
+                  "Additional information regarding the context of the statement.",
+              },
+            },
+            required: ["statement", "reason", "context"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["statements"],
+      additionalProperties: false,
+    },
+  },
 };

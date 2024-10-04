@@ -4,6 +4,7 @@ interface SessionData {
 }
 
 interface SessionConfig {
+  context: string;
   language: string;
   speakerCount: number;
   chunkSize: number;

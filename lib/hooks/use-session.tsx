@@ -33,7 +33,8 @@ export function SessionProvider({
   const [session, setSession] = React.useState<SessionData>({
     isRecording: false,
     config: {
-      language: "auto",
+      context: "A conversation between a couple of people.",
+      language: "en",
       speakerCount: 2,
       chunkSize: 10,
       sensitivity: 0.7,

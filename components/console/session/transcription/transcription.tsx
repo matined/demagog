@@ -1,110 +1,109 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Card,
   CardBody,
   CardHeader,
   Divider,
   ScrollShadow,
+  Spinner,
 } from "@nextui-org/react";
 import { toast } from "sonner";
 import { MdOutlineSpeakerNotes } from "react-icons/md";
+import { RealtimeTranscriber } from "assemblyai/streaming";
+import RecordRTC from "recordrtc";
+import { nanoid } from "nanoid";
 
 import { useSession } from "@/lib/hooks/use-session";
-import { transcribeAudio } from "@/lib/transcription";
 import { cn } from "@/lib/utils";
 import { useTranscription } from "@/lib/hooks/use-transcription";
 import Utterance from "./utterance";
+import { getTemporaryToken } from "@/lib/assemblyai/actions";
+import { useMicrophone } from "@/lib/hooks/use-microphone";
 
 export default function Transcription({ className }: { className?: string }) {
   const { utterances, extendUtterances } = useTranscription();
   const { session } = useSession();
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isRecordingRef = useRef(session.isRecording);
+  const { stream } = useMicrophone();
   const bottomRef = useRef<null | HTMLDivElement>(null);
 
-  const handleTranscription = async (audioBlob: Blob) => {
-    const formData = new FormData();
-    formData.append("audio", audioBlob, "audio.webm");
+  const realtimeTranscriber = useRef<RealtimeTranscriber | null>(null);
+  const recorder = useRef<RecordRTC | null>(null);
+  const [transcript, setTranscript] = useState<string>("");
 
-    if (session.config.language !== "auto")
-      formData.append("language", session.config.language);
-    else formData.append("language_detection", "true");
+  const startTranscription = useCallback(async () => {
+    realtimeTranscriber.current = new RealtimeTranscriber({
+      token: await getTemporaryToken(),
+      sampleRate: 16_000,
+    });
 
-    formData.append("speakerCount", session.config.speakerCount.toString());
-
-    transcribeAudio(formData)
-      .then((utterances) => {
-        extendUtterances(utterances);
-      })
-      .catch(() => {
-        toast.error("Transcription failed.");
-      });
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      });
-      mediaRecorderRef.current = new MediaRecorder(stream);
-
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorderRef.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: "audio/webm",
-        });
-
-        handleTranscription(audioBlob);
-
-        audioChunksRef.current = [];
-
-        if (isRecordingRef.current) {
-          startRecording();
-        } else {
-          // Stop all media tracks if not continuing
-          if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
-            mediaRecorderRef.current.stream
-              .getTracks()
-              .forEach((track) => track.stop());
-          }
-        }
-      };
-
-      mediaRecorderRef.current.start();
-
-      timerRef.current = setTimeout(() => {
-        stopRecording();
-      }, 20000);
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      toast.error("There was an error accessing microphone.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
+    realtimeTranscriber.current.on("transcript", (transcript) => {
+      if (transcript.message_type == "FinalTranscript") {
+        extendUtterances([
+          {
+            id: nanoid(),
+            text: transcript.text,
+            audio_start: transcript.audio_start,
+            audio_end: transcript.audio_end,
+          },
+        ]);
+        setTranscript("");
+      } else if (transcript.message_type == "PartialTranscript") {
+        setTranscript(transcript.text);
       }
-    }
-  };
+    });
+
+    realtimeTranscriber.current.on("error", (event) => {
+      console.error(event);
+      realtimeTranscriber.current?.close();
+      realtimeTranscriber.current = null;
+      toast.error("There was an error while transcribing.");
+    });
+
+    realtimeTranscriber.current.on("close", (code, reason) => {
+      console.log(`Connection closed: ${code} ${reason}`);
+      realtimeTranscriber.current = null;
+    });
+
+    await realtimeTranscriber.current.connect();
+
+    recorder.current = new RecordRTC(stream!, {
+      type: "audio",
+      mimeType: "audio/webm;codecs=pcm",
+      recorderType: RecordRTC.StereoAudioRecorder,
+      timeSlice: 250,
+      desiredSampRate: 16000,
+      numberOfAudioChannels: 1,
+      bufferSize: 4096,
+      audioBitsPerSecond: 128000,
+      ondataavailable: async (blob: Blob) => {
+        if (!realtimeTranscriber.current) return;
+        const buffer = await blob.arrayBuffer();
+        realtimeTranscriber.current.sendAudio(buffer);
+      },
+    });
+    recorder.current?.startRecording();
+  }, [stream, extendUtterances]);
+
+  const endTranscription = useCallback(async () => {
+    await realtimeTranscriber.current?.close();
+    realtimeTranscriber.current = null;
+
+    recorder.current?.pauseRecording();
+    recorder.current = null;
+  }, []);
 
   useEffect(() => {
-    isRecordingRef.current = session.isRecording;
-
-    if (session.isRecording) startRecording();
-    else stopRecording();
-  }, [session.isRecording]);
+    if (session.isRecording) startTranscription();
+    else endTranscription();
+  }, [session.isRecording, startTranscription, endTranscription]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -119,19 +118,31 @@ export default function Transcription({ className }: { className?: string }) {
       <Divider />
       <CardBody className="relative w-full h-full overflow-hidden">
         <ScrollShadow hideScrollBar className="absolute inset-3">
-          {utterances.length === 0 && session.isRecording && (
-            <p className="mt-12 text-center text-gray-500 animate-pulse">
-              Listening. Wait a moment for the first transcription...
-            </p>
-          )}
-          {utterances.length === 0 && !session.isRecording && (
-            <p className="mt-12 text-center text-gray-500">
-              Resume the session to start transribing.
-            </p>
-          )}
-          {utterances.map((utterance, index) => (
-            <Utterance key={index} utterance={utterance} className="mb-2" />
+          {utterances.length === 0 &&
+            transcript == "" &&
+            session.isRecording && (
+              <div className="mt-12 flex flex-col justify-content items-center gap-4 animate-pulse">
+                <Spinner />
+                <p className="text-gray-500">Listening to the speech...</p>
+              </div>
+            )}
+          {utterances.length === 0 &&
+            transcript == "" &&
+            !session.isRecording && (
+              <div className="mt-12 flex flex-col justify-content items-center gap-4">
+                <p className="text-gray-500">
+                  Resume the session to start transribing.
+                </p>
+              </div>
+            )}
+          {utterances.map((utterance) => (
+            <Utterance
+              key={utterance.id}
+              utterance={utterance}
+              className="mb-2"
+            />
           ))}
+          <Utterance key="realtime" text={transcript} className="mb-2" />
           <div ref={bottomRef} />
         </ScrollShadow>
       </CardBody>

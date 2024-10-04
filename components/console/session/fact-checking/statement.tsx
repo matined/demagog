@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
-import { Accordion, AccordionItem, Card, Chip } from "@nextui-org/react";
+import { useCallback, useEffect, useState } from "react";
+import { Accordion, AccordionItem, Divider, Spinner } from "@nextui-org/react";
 import { toast } from "sonner";
-import { MdOutlineTopic } from "react-icons/md";
 import { FaCheck, FaExclamation, FaQuestion } from "react-icons/fa";
+import Markdown from "react-markdown";
 
 import { cn } from "@/lib/utils";
 import {
@@ -19,92 +19,78 @@ export default function Statement({
   statement: StatementType;
 }) {
   const [factCheck, setFactCheck] = useState<FactCheck | null>(null);
+  const [isChecked, setIsChecked] = useState<boolean>(false);
 
-  const handleFactCheck = async () => {
-    if (factCheck != null) return;
+  const handleFactCheck = useCallback(async () => {
+    if (factCheck != null || isChecked) return;
+
+    setIsChecked(true);
 
     const formData = new FormData();
     formData.append("statement", statement.statement);
     formData.append("content", statement.context);
 
-    factCheckStatement(formData)
-      .then((fc) => {
-        if (fc != null) setFactCheck(fc);
-      })
-      .catch(() => {
-        console.error("Failed to fact check statement");
-        toast.error("Failed to fact check a statement");
-      });
-  };
+    try {
+      const fc = await factCheckStatement(formData);
+
+      if (fc != null) setFactCheck(fc);
+    } catch {
+      console.error("Failed to fact check statement");
+      toast.error("There was an error while fact checking a statement");
+    }
+  }, [statement, factCheck, isChecked]);
 
   useEffect(() => {
     handleFactCheck();
-  }, []);
+  }, [handleFactCheck]);
 
   return (
-    <Card
-      className={cn(
-        "w-full grid grid-cols-[3fr_minmax(250px,1fr)] overflow-hidden",
-        factCheck?.truthness == "FALSE" && "border border-red-500",
-        className
-      )}
+    <Accordion
+      variant="shadow"
+      className={cn("mb-4", className)}
+      itemClasses={{
+        title: "text-sm font-normal",
+        content: "text-sm text-left text-gray-500",
+      }}
     >
-      <Accordion
-        variant="shadow"
-        itemClasses={{
-          title: "text-sm font-normal",
-          content: "text-sm text-left text-gray-500",
-        }}
-      >
-        <AccordionItem
-          key="1"
-          aria-label={statement.context}
-          title={<span>{statement.statement} </span>}
-        >
-          {statement.context}
-        </AccordionItem>
-      </Accordion>
-      <div className="text-xs p-2 flex flex-col justify-between">
-        {/* <Chip
-          variant="bordered"
-          size="sm"
-          startContent={<MdOutlineTopic size={14} />}
-        >
-          {statement.topic}
-        </Chip> */}
-        {factCheck ? (
-          factCheck.truthness === "TRUE" ? (
-            <Chip
-              endContent={<FaCheck size={14} className="mx-1" />}
-              variant="light"
-              size="sm"
-              className="text-green-500 self-end"
-            >
-              True
-            </Chip>
-          ) : factCheck.truthness === "PARTIAL" ? (
-            <Chip
-              endContent={<FaQuestion size={14} className="mx-1" />}
-              variant="light"
-              size="sm"
-              className="text-yellow-500 self-end"
-            >
-              Partially true
-            </Chip>
+      <AccordionItem
+        key="1"
+        aria-label={statement.context}
+        title={
+          <div className="flex justify-between items-center">
+            <p>{statement.statement}</p>
+          </div>
+        }
+        startContent={
+          factCheck ? (
+            factCheck.truthness === "TRUE" ? (
+              <FaCheck size={16} className="mx-1 text-green-500" />
+            ) : factCheck.truthness === "PARTIAL" ? (
+              <FaQuestion size={16} className="mx-1 text-yellow-500" />
+            ) : (
+              <FaExclamation size={16} className="mx-1 text-red-500" />
+            )
           ) : (
-            <Chip
-              endContent={<FaExclamation size={14} className="mx-1" />}
-              variant="light"
-              size="sm"
-              className="text-red-500 self-end"
-            >
-              Fack-checked
-            </Chip>
+            <div className="relative w-full h-full flex justify-content items-center">
+              <Spinner size="sm" className="" />
+            </div>
           )
-        ) : (
-          <span className="text-gray-500">Fact-checking in progress...</span>
-        )}
-      </div>
-    </Card>
+        }
+      >
+        <div className="w-full flex flex-col gap-3">
+          <div>
+            <h3 className="text-normal font-bold mb-1">Statement</h3>
+            <p>{statement.context}</p>
+          </div>
+          <Divider />
+          <div>
+            <h3 className="text-normal font-bold mb-1">
+              Fact Check Justification
+            </h3>
+            <Markdown>{factCheck?.justification}</Markdown>
+          </div>
+        </div>
+      </AccordionItem>
+    </Accordion>
   );
 }

@@ -1,15 +1,17 @@
 "use client";
 
-import { TranscriptUtterance } from "assemblyai";
+import { Utterance as UtteranceType } from "@/lib/types/transcription";
 
 import { cn } from "@/lib/utils";
 
 export default function Utterance({
   className,
   utterance,
+  text,
 }: {
   className?: string;
-  utterance: TranscriptUtterance;
+  utterance?: UtteranceType;
+  text?: string;
 }) {
   return (
     <div
@@ -18,7 +20,10 @@ export default function Utterance({
         className
       )}
     >
-      <span>{utterance.text}</span>
+      <span>
+        {utterance?.text}
+        {text}
+      </span>
     </div>
   );
 }

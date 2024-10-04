@@ -1,7 +1,7 @@
 interface Statement {
   statement: string;
+  reason: string;
   context: string;
-  topic: string;
 }
 
 interface FactCheck {

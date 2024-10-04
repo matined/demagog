@@ -1,40 +1,53 @@
 "use server";
 
-import { Groq } from "groq-sdk";
-import { Statement, FactCheck } from "../types/fact-checking";
-import { FACT_DETECTION_SYSTEM_PROMPTS } from "./data";
+import OpenAI from "openai";
 
-const groq = new Groq();
+import { Statement, FactCheck } from "../types/fact-checking";
+import {
+  STATEMENT_DETECTION_SYSTEM_PROMPT,
+  STATEMENT_DETECTION_RESPONSE_SCHEMA,
+} from "./data";
 
 export async function detectStatements(
   formData: FormData
 ): Promise<Statement[]> {
-  const chatCompletion = await groq.chat.completions.create({
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
     messages: [
       {
         role: "system",
-        content:
-          FACT_DETECTION_SYSTEM_PROMPTS[formData.get("language") as string],
+        content: [
+          {
+            type: "text",
+            text: STATEMENT_DETECTION_SYSTEM_PROMPT,
+          },
+        ],
       },
       {
         role: "user",
-        content: formData.get("text") as string,
+        content: [
+          {
+            type: "text",
+            text: formData.get("text") as string,
+          },
+        ],
       },
     ],
-    model: "llama-3.2-11b-text-preview",
-    temperature: 0,
-    max_tokens: 400,
+    temperature: 1,
+    max_tokens: 2048,
     top_p: 1,
+    frequency_penalty: 0,
+    presence_penalty: 0,
     stream: false,
-    response_format: {
-      type: "json_object",
-    },
-    stop: null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    response_format: STATEMENT_DETECTION_RESPONSE_SCHEMA as any,
   });
 
-  const response = JSON.parse(chatCompletion.choices[0].message.content!);
-
-  return response.statements;
+  return JSON.parse(response.choices[0].message.content as string).statements;
 }
 
 export async function factCheckStatement(
@@ -93,7 +106,7 @@ export async function factCheckStatement(
     };
 
     return factCheck;
-  } catch (error) {
+  } catch {
     console.error("Failed to fact check a statement");
     return null;
   }
